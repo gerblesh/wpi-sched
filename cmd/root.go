@@ -169,7 +169,7 @@ func WriteIcalBuf(courses []Course, w io.Writer) error {
 			return err
 		}
 	}
-	_, err = w.Write([]byte("\nEND:VCALENDAR\n"))
+	_, err = w.Write([]byte("END:VCALENDAR\n"))
 	return err
 }
 
@@ -248,7 +248,8 @@ TRIGGER:-PT15M
 ACTION:DISPLAY
 DESCRIPTION:Reminder - %s starts soon
 END:VALARM
-END:VEVENT`,
+END:VEVENT
+`,
 		sanitizeUID(c.Description),
 		time.Now().UTC().Format("20060102T150405Z"),
 		startDateStr, startTime,
