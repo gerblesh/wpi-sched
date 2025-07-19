@@ -155,7 +155,7 @@ func GetCourses(f *excelize.File) ([]Course, error) {
 }
 
 func WriteIcalBuf(courses []Course, w io.Writer) error {
-	_, err := w.Write([]byte("BEGIN:VCALENDAR\nVERSION:2.0\nCALSCALE:GREGORIAN"))
+	_, err := w.Write([]byte("BEGIN:VCALENDAR\nVERSION:2.0\nCALSCALE:GREGORIAN\n"))
 	if err != nil {
 		return err
 	}
