@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"regexp"
+	"slices"
 	"strings"
 	"time"
 
@@ -186,14 +187,17 @@ startDate: MM/DD/YYYY
 func GetIcal(c Course) ([]byte, error) {
 	// rough reference: https://gist.github.com/DeMarko/6142417
 	// actual spec: https://www.rfc-editor.org/rfc/rfc5545
-	dayMap := map[string]string{
-		"M": "MO",
-		"T": "TU",
-		"W": "WE",
-		"R": "TH",
-		"F": "FR",
+	type day struct {
+		ICal string
+		Time time.Weekday
 	}
-
+	dayMap := map[string]day{
+		"M": {"MO", time.Monday},
+		"T": {"TU", time.Tuesday},
+		"W": {"WE", time.Wednesday},
+		"R": {"TH", time.Thursday},
+		"F": {"FR", time.Friday},
+	}
 	// Parsing the 'Meeting Patterns' column
 	parsedMeet := strings.Split(c.Meeting, "|")
 	if len(parsedMeet) < 3 {
@@ -202,14 +206,25 @@ func GetIcal(c Course) ([]byte, error) {
 
 	freq := strings.TrimSpace(parsedMeet[0])
 	parsedFreq := []string{}
+	validWeekdays := []time.Weekday{}
 	for d := range strings.SplitSeq(freq, "-") {
 		day, ok := dayMap[d]
 		if !ok {
 			return nil, fmt.Errorf("unable to parse day: %s, not in map: %v", d, dayMap)
 		}
-		parsedFreq = append(parsedFreq, day)
+		parsedFreq = append(parsedFreq, day.ICal)
+		validWeekdays = append(validWeekdays, day.Time)
 	}
 	byDay := strings.Join(parsedFreq, ",")
+
+	endDate, err := convertDate(c.EndDate)
+	if err != nil {
+		return nil, err
+	}
+	startDate, err := convertStartDate(c.StartDate, validWeekdays)
+	if err != nil {
+		return nil, err
+	}
 
 	times := strings.Split(strings.TrimSpace(parsedMeet[1]), "-")
 	if len(times) < 2 {
@@ -219,16 +234,7 @@ func GetIcal(c Course) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	endTime, err := convertTime(strings.TrimSpace(times[0]))
-	if err != nil {
-		return nil, err
-	}
-
-	endDateStr, err := convertDate(c.EndDate)
-	if err != nil {
-		return nil, err
-	}
-	startDateStr, err := convertDate(c.StartDate)
+	endTime, err := convertTime(strings.TrimSpace(times[1]))
 	if err != nil {
 		return nil, err
 	}
@@ -250,26 +256,41 @@ DESCRIPTION:Reminder - %s starts soon
 END:VALARM
 END:VEVENT
 `,
-		sanitizeUID(c.Description),
+		sanitizeUID(c.Description, byDay),
 		time.Now().UTC().Format("20060102T150405Z"),
-		startDateStr, startTime,
-		startDateStr, endTime,
+		startDate, startTime,
+		startDate, endTime,
 		c.Description,
 		location,
 		byDay,
-		endDateStr,
+		endDate,
 		c.Description,
 	)
 	return []byte(ical), nil
 }
 
-func sanitizeUID(desc string) string {
+func sanitizeUID(desc string, days string) string {
 	re := regexp.MustCompile(`[^a-zA-Z0-9]+`)
-	cleaned := re.ReplaceAllString(desc, "_")
+	cleaned := re.ReplaceAllString(desc+days, "_")
 	return strings.Trim(cleaned, "_") + "@wpi.edu"
 }
 
-// convertDate converts "MM/DD/YYYY" -> "YYYYMMDD"
+// convertDate converts "MM/DD/YYYY" -> "YYYYMMDD" and moves the date to a valid weekday to make ical happy
+func convertStartDate(dateStr string, validDays []time.Weekday) (string, error) {
+	t, err := time.Parse("01-02-06", dateStr)
+	if err != nil {
+		return "", err
+	}
+	for _ = range 7 {
+		if slices.Contains(validDays, t.Weekday()) {
+			break
+		}
+		t = t.AddDate(0, 0, 1)
+	}
+	return t.Format("20060102"), nil
+}
+
+// convertDate converts "MM/DD/YYYY" -> "YYYYMMDD" and moves the date to a valid weekday to make ical happy
 func convertDate(dateStr string) (string, error) {
 	t, err := time.Parse("01-02-06", dateStr)
 	if err != nil {
@@ -285,4 +306,13 @@ func convertTime(timeStr string) (string, error) {
 		return "", err
 	}
 	return t.Format("150405"), nil
+}
+
+func adjustStartDateToValidDay(startDate time.Time, validDays []time.Weekday) time.Time {
+	for {
+		if slices.Contains(validDays, startDate.Weekday()) {
+			return startDate
+		}
+		startDate = startDate.AddDate(0, 0, 1) // Add 1 day
+	}
 }
