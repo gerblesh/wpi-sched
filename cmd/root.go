@@ -28,6 +28,8 @@ const (
 	DESC_COL       string = "Course Listing"
 	START_DATE_COL string = "Start Date"
 	END_DATE_COL   string = "End Date"
+	INSTRUCTOR_COL string = "Instructor"
+	TIMEZONE       string = "America/New_York"
 )
 
 type Course struct {
@@ -106,6 +108,9 @@ func getColumns(rows [][]string) (map[string]int, int, error) {
 			case END_DATE_COL:
 				cols[END_DATE_COL] = j
 				startRow = i + 1
+			case INSTRUCTOR_COL:
+				cols[INSTRUCTOR_COL] = j
+				startRow = i + 1
 			}
 		}
 		if startRow != -1 {
@@ -140,13 +145,19 @@ func GetCourses(f *excelize.File) ([]Course, error) {
 	endDateCol := cols[END_DATE_COL]
 	meetingCol := cols[MEETING_COL]
 	descriptionCol := cols[DESC_COL]
+	instructorCol := cols[INSTRUCTOR_COL]
 
 	for _, row := range rows[startRow:] {
 		if len(row) <= endDateCol {
 			break
 		}
+		descSlice := []string{}
+		descSlice = append(descSlice, row[descriptionCol])
+		if row[instructorCol] != "" {
+			descSlice = append(descSlice, row[instructorCol])
+		}
 		courses = append(courses, Course{
-			row[descriptionCol],
+			strings.Join(descSlice, " - "),
 			row[meetingCol],
 			row[startDateCol],
 			row[endDateCol],
@@ -156,7 +167,7 @@ func GetCourses(f *excelize.File) ([]Course, error) {
 }
 
 func WriteIcalBuf(courses []Course, w io.Writer) error {
-	_, err := w.Write([]byte("BEGIN:VCALENDAR\nVERSION:2.0\nCALSCALE:GREGORIAN\n"))
+	_, err := fmt.Fprintf(w, "BEGIN:VCALENDAR\nVERSION:2.0\nCALSCALE:GREGORIAN\n")
 	if err != nil {
 		return err
 	}
@@ -165,12 +176,12 @@ func WriteIcalBuf(courses []Course, w io.Writer) error {
 		if err != nil {
 			return err
 		}
-		_, err = w.Write(e)
+		_, err = fmt.Fprintf(w, e)
 		if err != nil {
 			return err
 		}
 	}
-	_, err = w.Write([]byte("END:VCALENDAR\n"))
+	_, err = fmt.Fprintf(w, "END:VCALENDAR\n")
 	return err
 }
 
@@ -184,7 +195,7 @@ The rest is pretty self explanitory
 endDate: MM/DD/YYYY
 startDate: MM/DD/YYYY
 */
-func GetIcal(c Course) ([]byte, error) {
+func GetIcal(c Course) (string, error) {
 	// rough reference: https://gist.github.com/DeMarko/6142417
 	// actual spec: https://www.rfc-editor.org/rfc/rfc5545
 	type day struct {
@@ -201,7 +212,7 @@ func GetIcal(c Course) ([]byte, error) {
 	// Parsing the 'Meeting Patterns' column
 	parsedMeet := strings.Split(c.Meeting, "|")
 	if len(parsedMeet) < 3 {
-		return nil, fmt.Errorf("unable to parse 'Meeting Patterns': expected at least 3 parts, got %d", len(parsedMeet))
+		return "", fmt.Errorf("unable to parse 'Meeting Patterns': expected at least 3 parts, got %d", len(parsedMeet))
 	}
 
 	freq := strings.TrimSpace(parsedMeet[0])
@@ -210,7 +221,7 @@ func GetIcal(c Course) ([]byte, error) {
 	for d := range strings.SplitSeq(freq, "-") {
 		day, ok := dayMap[d]
 		if !ok {
-			return nil, fmt.Errorf("unable to parse day: %s, not in map: %v", d, dayMap)
+			return "", fmt.Errorf("unable to parse day: %s, not in map: %v", d, dayMap)
 		}
 		parsedFreq = append(parsedFreq, day.ICal)
 		validWeekdays = append(validWeekdays, day.Time)
@@ -219,24 +230,24 @@ func GetIcal(c Course) ([]byte, error) {
 
 	endDate, err := convertDate(c.EndDate)
 	if err != nil {
-		return nil, err
+		return "", err
 	}
 	startDate, err := convertStartDate(c.StartDate, validWeekdays)
 	if err != nil {
-		return nil, err
+		return "", err
 	}
 
 	times := strings.Split(strings.TrimSpace(parsedMeet[1]), "-")
 	if len(times) < 2 {
-		return nil, fmt.Errorf("unable to parse 'Meeting Patterns': expected at least 2 times (start and end), got %d", len(parsedMeet))
+		return "", fmt.Errorf("unable to parse 'Meeting Patterns': expected at least 2 times (start and end), got %d", len(parsedMeet))
 	}
 	startTime, err := convertTime(strings.TrimSpace(times[0]))
 	if err != nil {
-		return nil, err
+		return "", err
 	}
 	endTime, err := convertTime(strings.TrimSpace(times[1]))
 	if err != nil {
-		return nil, err
+		return "", err
 	}
 
 	location := strings.TrimSpace(parsedMeet[2])
@@ -244,8 +255,8 @@ func GetIcal(c Course) ([]byte, error) {
 	ical := fmt.Sprintf(`BEGIN:VEVENT
 UID:%s
 DTSTAMP:%s
-DTSTART;TZID=America/New_York:%sT%s
-DTEND;TZID=America/New_York:%sT%s
+DTSTART;TZID=%s:%sT%s
+DTEND;TZID=%s:%sT%s
 SUMMARY:%s
 LOCATION:%s
 RRULE:FREQ=WEEKLY;BYDAY=%s;UNTIL=%sT235959
@@ -258,15 +269,15 @@ END:VEVENT
 `,
 		sanitizeUID(c.Description, byDay),
 		time.Now().UTC().Format("20060102T150405Z"),
-		startDate, startTime,
-		startDate, endTime,
+		TIMEZONE, startDate, startTime,
+		TIMEZONE, startDate, endTime,
 		c.Description,
 		location,
 		byDay,
 		endDate,
 		c.Description,
 	)
-	return []byte(ical), nil
+	return ical, nil
 }
 
 func sanitizeUID(desc string, days string) string {
@@ -281,7 +292,7 @@ func convertStartDate(dateStr string, validDays []time.Weekday) (string, error) 
 	if err != nil {
 		return "", err
 	}
-	for _ = range 7 {
+	for range 7 {
 		if slices.Contains(validDays, t.Weekday()) {
 			break
 		}
@@ -290,7 +301,7 @@ func convertStartDate(dateStr string, validDays []time.Weekday) (string, error) 
 	return t.Format("20060102"), nil
 }
 
-// convertDate converts "MM/DD/YYYY" -> "YYYYMMDD" and moves the date to a valid weekday to make ical happy
+// convertDate converts "MM-DD-YYYY" -> "YYYYMMDD" and moves the date to a valid weekday to make ical happy
 func convertDate(dateStr string) (string, error) {
 	t, err := time.Parse("01-02-06", dateStr)
 	if err != nil {
@@ -306,13 +317,4 @@ func convertTime(timeStr string) (string, error) {
 		return "", err
 	}
 	return t.Format("150405"), nil
-}
-
-func adjustStartDateToValidDay(startDate time.Time, validDays []time.Weekday) time.Time {
-	for {
-		if slices.Contains(validDays, startDate.Weekday()) {
-			return startDate
-		}
-		startDate = startDate.AddDate(0, 0, 1) // Add 1 day
-	}
 }
