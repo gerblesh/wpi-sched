@@ -6,9 +6,12 @@
 </head>
 <body>
   <marquee>Web Design is my Passion</marquee>
-  <h1>Upload Excel to generate iCal</h1>
-  <input type="file" id="fileInput" />
-  <pre id="output"></pre>
+  <h1>Workday Calendar to iCal</h1>
+  <input type="file" id="fileInput" accept=".xlsx" />
+  <p id="output"></p>
+  <p>To get your schedule as an Excel spreadsheet:
+Go to <a href="https://wd5.myworkday.com/wpi/d/home.htmld">Workday</a>. Then, find and click on to the Academics page in the menu. Then navigate to the "Planning & Registration" &gt "View My Courses" page. Click on the excel button (shown below) to export your schedule as a .xlsx file</p>
+  <img src="static/workday.png" style="width: 100%; height: auto;" />
 
   <script src="static/wasm_exec.js"></script>
   <script>
@@ -49,9 +52,9 @@
           const url = URL.createObjectURL(blob);
 
           output.innerHTML = `
-            <p>Download your iCal file here:</p>
-            <a href="${url}" download="schedule.ics">Download iCal</a>
-          `;
+            <a href="${url}" download="schedule.ics">Download the iCal file</a>
+            <p>After downloading you can import the ics file into your calendar</p>
+            `;
         } catch (e) {
           output.textContent = "Exception: " + e.message;
         }
