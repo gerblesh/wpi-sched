@@ -7,7 +7,7 @@ build-cli:
 build-wasm:
     #!/usr/bin/env bash
     GOOS=js GOARCH=wasm go build -o static/main.wasm ./wasm
-    cp "$(go env GOROOT)/lib/wasm/wasm_exec.js" public/
+    cp "$(go env GOROOT)/lib/wasm/wasm_exec.js" static/
 
 python-http:
-    cd public && python -m http.server
+    python -m http.server
