@@ -1,5 +1,13 @@
 default:
     just --list
 
-build:
-    go build -o "wpi-sched"
+build-cli:
+    go build -o "wpi-sched" ./cli
+
+build-wasm:
+    #!/usr/bin/env bash
+    GOOS=js GOARCH=wasm go build -o static/main.wasm ./wasm
+    cp "$(go env GOROOT)/lib/wasm/wasm_exec.js" public/
+
+python-http:
+    cd public && python -m http.server

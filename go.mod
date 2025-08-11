@@ -1,4 +1,4 @@
-module github.com/gerblesh/wpi-sched.git
+module github.com/gerblesh/wpi-sched
 
 go 1.24.5
 

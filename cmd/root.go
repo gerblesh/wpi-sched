@@ -176,7 +176,7 @@ func WriteIcalBuf(courses []Course, w io.Writer) error {
 		if err != nil {
 			return err
 		}
-		_, err = fmt.Fprintf(w, e)
+		_, err = fmt.Fprint(w, e)
 		if err != nil {
 			return err
 		}
