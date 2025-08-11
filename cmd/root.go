@@ -210,6 +210,10 @@ func GetIcal(c Course) (string, error) {
 		"F": {"FR", time.Friday},
 	}
 	// Parsing the 'Meeting Patterns' column
+	// sometimes the 'Meeting Patterns' column can just say fuck all for specific classes, literally nothing useful here, just give up
+	if c.Meeting == "" {
+		return "", nil
+	}
 	parsedMeet := strings.Split(c.Meeting, "|")
 	if len(parsedMeet) < 3 {
 		return "", fmt.Errorf("unable to parse 'Meeting Patterns': expected at least 3 parts, got %d", len(parsedMeet))
